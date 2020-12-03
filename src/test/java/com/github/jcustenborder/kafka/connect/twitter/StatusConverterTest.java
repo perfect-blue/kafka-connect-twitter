@@ -15,6 +15,7 @@
  */
 package com.github.jcustenborder.kafka.connect.twitter;
 
+
 import org.apache.kafka.connect.data.Struct;
 import org.junit.jupiter.api.Test;
 import twitter4j.GeoLocation;
@@ -51,7 +52,7 @@ public class StatusConverterTest {
     return place;
   }
 
-  public static Status mockStatus() {
+  public static Status mockQuotedStatus() {
     Status status = mock(Status.class);
     User user = mockUser();
     GeoLocation geoLocation = mockGeoLocation();
@@ -70,6 +71,43 @@ public class StatusConverterTest {
     when(status.isFavorited()).thenReturn(true);
     when(status.isRetweeted()).thenReturn(false);
     when(status.getFavoriteCount()).thenReturn(1234);
+    when(status.getUser()).thenReturn(user);
+    when(status.isRetweet()).thenReturn(false);
+    when(status.getContributors()).thenReturn(new long[]{431234L, 986789678L});
+    when(status.getRetweetCount()).thenReturn(1234);
+    when(status.isRetweetedByMe()).thenReturn(false);
+    when(status.getCurrentUserRetweetId()).thenReturn(653456345L);
+    when(status.isPossiblySensitive()).thenReturn(false);
+    when(status.getLang()).thenReturn("en-US");
+    when(status.getWithheldInCountries()).thenReturn(new String[]{"CN"});
+
+    return status;
+
+  }
+
+  public static Status mockStatus() {
+    Status status = mock(Status.class);
+    User user = mockUser();
+    Status quotedStatus = mockQuotedStatus();
+    Status retweetStatus = mockQuotedStatus();
+    GeoLocation geoLocation = mockGeoLocation();
+    Place place = mockPlace();
+
+    when(status.getCreatedAt()).thenReturn(new Date(1471667709998L));
+    when(status.getId()).thenReturn(9823452L);
+    when(status.getText()).thenReturn("This is a twit");
+    when(status.getSource()).thenReturn("foo");
+    when(status.isTruncated()).thenReturn(false);
+    when(status.getInReplyToStatusId()).thenReturn(2345234L);
+    when(status.getInReplyToUserId()).thenReturn(8756786L);
+    when(status.getInReplyToScreenName()).thenReturn("foo");
+    when(status.getGeoLocation()).thenReturn(geoLocation);
+    when(status.getPlace()).thenReturn(place);
+    when(status.isFavorited()).thenReturn(true);
+    when(status.isRetweeted()).thenReturn(false);
+    when(status.getFavoriteCount()).thenReturn(1234);
+    when(status.getQuotedStatus()).thenReturn(quotedStatus);
+    when(status.getRetweetedStatus()).thenReturn(retweetStatus);
     when(status.getUser()).thenReturn(user);
     when(status.isRetweet()).thenReturn(false);
     when(status.getContributors()).thenReturn(new long[]{431234L, 986789678L});
@@ -162,6 +200,33 @@ public class StatusConverterTest {
     return list;
   }
 
+  void assertQuoteStatus(Status status, Struct struct) {
+    assertEquals(status.getCreatedAt(), struct.get("CreatedAt"), "CreatedAt does not match.");
+    assertEquals(status.getId(), struct.get("Id"), "Id does not match.");
+    assertEquals(status.getText(), struct.get("Text"), "Text does not match.");
+    assertEquals(status.getSource(), struct.get("Source"), "Source does not match.");
+    assertEquals(status.isTruncated(), struct.get("Truncated"), "Truncated does not match.");
+    assertEquals(status.getInReplyToStatusId(), struct.get("InReplyToStatusId"), "InReplyToStatusId does not match.");
+    assertEquals(status.getInReplyToUserId(), struct.get("InReplyToUserId"), "InReplyToUserId does not match.");
+    assertEquals(status.getInReplyToScreenName(), struct.get("InReplyToScreenName"), "InReplyToScreenName does not match.");
+    assertEquals(status.isFavorited(), struct.get("Favorited"), "Favorited does not match.");
+    assertEquals(status.isRetweeted(), struct.get("Retweeted"), "Retweeted does not match.");
+    assertEquals(status.getFavoriteCount(), struct.get("FavoriteCount"), "FavoriteCount does not match.");
+    assertEquals(status.isRetweet(), struct.get("Retweet"), "Retweet does not match.");
+    assertEquals(status.getRetweetCount(), struct.get("RetweetCount"), "RetweetCount does not match.");
+    assertEquals(status.isRetweetedByMe(), struct.get("RetweetedByMe"), "RetweetedByMe does not match.");
+    assertEquals(status.getCurrentUserRetweetId(), struct.get("CurrentUserRetweetId"), "CurrentUserRetweetId does not match.");
+    assertEquals(status.isPossiblySensitive(), struct.get("PossiblySensitive"), "PossiblySensitive does not match.");
+    assertEquals(status.getLang(), struct.get("Lang"), "Lang does not match.");
+
+    assertUser(status.getUser(), struct.getStruct("User"));
+    assertPlace(status.getPlace(), struct.getStruct("Place"));
+    assertGeoLocation(status.getGeoLocation(), struct.getStruct("GeoLocation"));
+
+    assertEquals(convert(status.getContributors()), struct.getArray("Contributors"), "Contributors does not match.");
+    assertEquals(convert(status.getWithheldInCountries()), struct.get("WithheldInCountries"), "WithheldInCountries does not match.");
+  }
+
   void assertStatus(Status status, Struct struct) {
     assertEquals(status.getCreatedAt(), struct.get("CreatedAt"), "CreatedAt does not match.");
     assertEquals(status.getId(), struct.get("Id"), "Id does not match.");
@@ -181,6 +246,8 @@ public class StatusConverterTest {
     assertEquals(status.isPossiblySensitive(), struct.get("PossiblySensitive"), "PossiblySensitive does not match.");
     assertEquals(status.getLang(), struct.get("Lang"), "Lang does not match.");
 
+    assertQuoteStatus(status.getQuotedStatus(), struct.getStruct("QuoteStatus"));
+    assertQuoteStatus(status.getRetweetedStatus(), struct.getStruct("RetweetedStatus"));
     assertUser(status.getUser(), struct.getStruct("User"));
     assertPlace(status.getPlace(), struct.getStruct("Place"));
     assertGeoLocation(status.getGeoLocation(), struct.getStruct("GeoLocation"));
@@ -266,6 +333,14 @@ public class StatusConverterTest {
     Struct struct = new Struct(StatusConverter.STATUS_SCHEMA);
     StatusConverter.convert(status, struct);
     assertStatus(status, struct);
+  }
+
+  @Test
+  public void convertQuoteStatus() {
+    Status status = mockQuotedStatus();
+    Struct struct = new Struct(StatusConverter.QUOTE_STATUS_SCHEMA);
+    StatusConverter.convertQuotedTweet(status, struct);
+    assertQuoteStatus(status, struct);
   }
 
   @Test

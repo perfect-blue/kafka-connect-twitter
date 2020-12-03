@@ -45,6 +45,7 @@ public class StatusConverter {
   public static final Schema SCHEMA_STATUS_DELETION_NOTICE_KEY;
   public static final Schema STATUS_SCHEMA_KEY;
   public static final Schema STATUS_SCHEMA;
+  public static final Schema QUOTE_STATUS_SCHEMA;
 
   public static final Schema USER_SCHEMA = SchemaBuilder.struct()
       .name("com.github.jcustenborder.kafka.connect.twitter.User")
@@ -223,6 +224,41 @@ public class StatusConverter {
       .build();
 
   static {
+    QUOTE_STATUS_SCHEMA = SchemaBuilder.struct()
+            .name("com.github.jcustenborder.kafka.connect.twitter.Quotes")
+            .optional()
+            .doc("Returns twitter quoted status message. If available")
+            .field("CreatedAt", Timestamp.builder().doc("Return the created_at").optional().build())
+            .field("Id", SchemaBuilder.int64().doc("Returns the id of the status").optional().build())
+            .field("Text", SchemaBuilder.string().doc("Returns the text of the status").optional().build())
+            .field("Source", SchemaBuilder.string().doc("Returns the source").optional().build())
+            .field("Truncated", SchemaBuilder.bool().doc("Test if the status is truncated").optional().build())
+            .field("InReplyToStatusId", SchemaBuilder.int64().doc("Returns the in_reply_tostatus_id").optional().build())
+            .field("InReplyToUserId", SchemaBuilder.int64().doc("Returns the in_reply_user_id").optional().build())
+            .field("InReplyToScreenName", SchemaBuilder.string().doc("Returns the in_reply_to_screen_name").optional().build())
+            .field("GeoLocation", GEO_LOCATION_SCHEMA)
+            .field("Place", PLACE_SCHEMA)
+            .field("Favorited", SchemaBuilder.bool().doc("Test if the status is favorited").optional().build())
+            .field("Retweeted", SchemaBuilder.bool().doc("Test if the status is retweeted").optional().build())
+            .field("FavoriteCount", SchemaBuilder.int32().doc("Indicates approximately how many times this Tweet has been \"favorited\" by Twitter users.").optional().build())
+            .field("User", USER_SCHEMA)
+            .field("Retweet", SchemaBuilder.bool().optional().build())
+            .field("Contributors", SchemaBuilder.array(Schema.INT64_SCHEMA).doc("Returns an array of contributors, or null if no contributor is associated with this status.").build())
+            .field("RetweetCount", SchemaBuilder.int32().doc("Returns the number of times this tweet has been retweeted, or -1 when the tweet was created before this feature was enabled.").optional().build())
+            .field("RetweetedByMe", SchemaBuilder.bool().optional().build())
+            .field("CurrentUserRetweetId", SchemaBuilder.int64().doc("Returns the authenticating user's retweet's id of this tweet, or -1L when the tweet was created before this feature was enabled.").optional().build())
+            .field("PossiblySensitive", SchemaBuilder.bool().optional().build())
+            .field("Lang", SchemaBuilder.string().doc("Returns the lang of the status text if available.").optional().build())
+            .field("WithheldInCountries", SchemaBuilder.array(Schema.STRING_SCHEMA).doc("Returns the list of country codes where the tweet is withheld").build())
+            .field("HashtagEntities", SchemaBuilder.array(SCHEMA_HASHTAG_ENTITY).doc("Returns an array if hashtag mentioned in the tweet.").optional().build())
+            .field("UserMentionEntities", SchemaBuilder.array(SCHEMA_USER_MENTION_ENTITY).doc("Returns an array of user mentions in the tweet.").optional().build())
+            .field("MediaEntities", SchemaBuilder.array(SCHEMA_MEDIA_ENTITY).doc("Returns an array of MediaEntities if medias are available in the tweet.").optional().build())
+            .field("SymbolEntities", SchemaBuilder.array(SCHEMA_SYMBOL_ENTITY).doc("Returns an array of SymbolEntities if medias are available in the tweet.").optional().build())
+            .field("URLEntities", SchemaBuilder.array(SCHEMA_URL_ENTITY).doc("Returns an array if URLEntity mentioned in the tweet.").optional().build())
+
+            .build();
+  }
+  static {
     STATUS_SCHEMA = SchemaBuilder.struct()
         .name("com.github.jcustenborder.kafka.connect.twitter.Status")
         .doc("Twitter status message.")
@@ -234,6 +270,8 @@ public class StatusConverter {
         .field("InReplyToStatusId", SchemaBuilder.int64().doc("Returns the in_reply_tostatus_id").optional().build())
         .field("InReplyToUserId", SchemaBuilder.int64().doc("Returns the in_reply_user_id").optional().build())
         .field("InReplyToScreenName", SchemaBuilder.string().doc("Returns the in_reply_to_screen_name").optional().build())
+        .field("QuoteStatus", QUOTE_STATUS_SCHEMA)
+        .field("RetweetedStatus", QUOTE_STATUS_SCHEMA)
         .field("GeoLocation", GEO_LOCATION_SCHEMA)
         .field("Place", PLACE_SCHEMA)
         .field("Favorited", SchemaBuilder.bool().doc("Test if the status is favorited").optional().build())
@@ -562,6 +600,77 @@ public class StatusConverter {
     return result;
   }
 
+  public static void convertQuotedTweet(Status status, Struct struct) {
+    if (null == status) {
+      return;
+    }
+    struct
+            .put("CreatedAt", status.getCreatedAt()).put("Id", status.getId())
+            .put("Text", status.getText())
+            .put("Source", status.getSource())
+            .put("Truncated", status.isTruncated())
+            .put("InReplyToStatusId", status.getInReplyToStatusId())
+            .put("InReplyToUserId", status.getInReplyToUserId())
+            .put("InReplyToScreenName", status.getInReplyToScreenName())
+            .put("Favorited", status.isFavorited())
+            .put("Retweeted", status.isRetweeted())
+            .put("FavoriteCount", status.getFavoriteCount())
+            .put("Retweet", status.isRetweet())
+            .put("RetweetCount", status.getRetweetCount())
+            .put("RetweetedByMe", status.isRetweetedByMe())
+            .put("CurrentUserRetweetId", status.getCurrentUserRetweetId())
+            .put("PossiblySensitive", status.isPossiblySensitive())
+            .put("Lang", status.getLang());
+
+    Struct userStruct;
+    if (null != status.getUser()) {
+      userStruct = new Struct(USER_SCHEMA);
+      convert(status.getUser(), userStruct);
+    } else {
+      userStruct = null;
+    }
+    struct.put("User", userStruct);
+
+    Struct placeStruct;
+    if (null != status.getPlace()) {
+      placeStruct = new Struct(PLACE_SCHEMA);
+      convert(status.getPlace(), placeStruct);
+    } else {
+      placeStruct = null;
+    }
+    struct.put("Place", placeStruct);
+
+    Struct geoLocationStruct;
+    if (null != status.getGeoLocation()) {
+      geoLocationStruct = new Struct(GEO_LOCATION_SCHEMA);
+      convert(status.getGeoLocation(), geoLocationStruct);
+    } else {
+      geoLocationStruct = null;
+    }
+    struct.put("GeoLocation", geoLocationStruct);
+    List<Long> contributers = new ArrayList<>();
+
+    if (null != status.getContributors()) {
+      for (Long l : status.getContributors()) {
+        contributers.add(l);
+      }
+    }
+    struct.put("Contributors", contributers);
+
+    List<String> withheldInCountries = new ArrayList<>();
+    if (null != status.getWithheldInCountries()) {
+      for (String s : status.getWithheldInCountries()) {
+        withheldInCountries.add(s);
+      }
+    }
+    struct.put("WithheldInCountries", withheldInCountries);
+
+    struct.put("HashtagEntities", convert(status.getHashtagEntities()));
+    struct.put("UserMentionEntities", convert(status.getUserMentionEntities()));
+    struct.put("MediaEntities", convert(status.getMediaEntities()));
+    struct.put("SymbolEntities", convert(status.getSymbolEntities()));
+    struct.put("URLEntities", convert(status.getURLEntities()));
+  }
 
   public static void convertKey(Status status, Struct struct) {
     struct.put("Id", status.getId());
@@ -595,6 +704,24 @@ public class StatusConverter {
       userStruct = null;
     }
     struct.put("User", userStruct);
+
+    Struct quoteTweetStruct;
+    if (null != status.getQuotedStatus()) {
+      quoteTweetStruct = new Struct(QUOTE_STATUS_SCHEMA);
+      convertQuotedTweet(status.getQuotedStatus(), quoteTweetStruct);
+    } else {
+      quoteTweetStruct = null;
+    }
+    struct.put("QuoteStatus", quoteTweetStruct);
+
+    Struct retweetedTweetStruct;
+    if (null != status.getRetweetedStatus()) {
+      retweetedTweetStruct = new Struct(QUOTE_STATUS_SCHEMA);
+      convertQuotedTweet(status.getRetweetedStatus(), retweetedTweetStruct);
+    } else {
+      retweetedTweetStruct = null;
+    }
+    struct.put("RetweetedStatus", retweetedTweetStruct);
 
     Struct placeStruct;
     if (null != status.getPlace()) {
